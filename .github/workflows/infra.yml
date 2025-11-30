@@ -63,4 +63,4 @@ jobs:
           # must match composite input name exactly
           GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
 
-          destroy: ${{ github.event.inputs.destroy || 'false' }}
+          destroy: ${{ github.event.inputs.destroy || 'true' }}
