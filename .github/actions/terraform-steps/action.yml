@@ -181,7 +181,9 @@ runs:
 
 
     - name: Terraform Apply
-      if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && inputs.destroy != 'true' }} || ${{github.event_name == 'workflow_dispatch' && inputs.destroy != 'true'}}
+      #if: ${{ ((github.ref == 'refs/heads/main' && github.event_name == 'push')|| github.event_name == 'workflow_dispatch')&& inputs.destroy != 'true' }}
+      if: ${{ inputs.destroy != 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+    
 
       shell: bash
       working-directory: ${{ env.WORKDIR }}
