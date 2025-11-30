@@ -47,7 +47,7 @@ jobs:
 
           environment: ${{ env.ENVIRONMENT }}
           terraform-version: latest
-          plan-title: "Terraform Plan Output"
+          plan_title: "Terraform Plan Output"
 
           # composite auto-selects path based on environment
           working-directory: ""
