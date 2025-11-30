@@ -137,7 +137,7 @@ runs:
       if: ${{ github.event_name == 'pull_request' }}
       uses: actions/github-script@v6
       with:
-        github-token: ${{ inputs.github-token }}   # required
+        github-token: ${{ inputs.github-token}}
         script: |
           const fs = require("fs");
           const plan = fs.readFileSync("/tmp/plan.txt", "utf8");
@@ -165,11 +165,12 @@ runs:
           \`\`\`
 
           Environment: **${process.env.ENVIRONMENT}**`
-                    });
-                  }
-              env:
-                ENVIRONMENT: ${{ inputs.environment }}
-                PLAN_TITLE: ${{ inputs['plan-title'] }}
+                  });
+                }
+            env:
+              ENVIRONMENT: ${{ inputs.environment }}
+              PLAN_TITLE: ${{ inputs["plan-title"] }}
+
 
 
     - name: Terraform Apply
