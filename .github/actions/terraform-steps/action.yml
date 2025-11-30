@@ -134,46 +134,54 @@ runs:
       run: terraform show -no-color tf.plan > /tmp/plan.txt
 
     - name: Comment PR with Terraform Plan
-      if: ${{ github.event_name == 'pull_request' }}
+      #if: ${{ github.event_name == 'pull_request' }}
       uses: actions/github-script@v6
+      if: github.event_name == 'pull_request'
       with:
-        github-token: ${{ inputs.PERSONAL_TOKEN }}   # required
+        github-token: ${{ inputs.GITHUB_TOKEN }}
         script: |
           const fs = require("fs");
           const plan = fs.readFileSync("/tmp/plan.txt", "utf8");
-          const limit = 60000;
-
-          function splitIntoChunks(text, size) {
-            const out = [];
-            for (let i = 0; i < text.length; i += size) {
-              out.push(text.substring(i, i + size));
+          const maxGitHubBodyCharacters = 65536;
+          
+          function chunkSubstr(str, size) {
+            const numChunks = Math.ceil(str.length / size)
+            const chunks = new Array(numChunks)
+            for (let i = 0, o = 0; i < numChunks; ++i, o += size) {
+              chunks[i] = str.substr(o, size)
             }
-            return out;
+            return chunks
           }
+        
+          // Split the Terraform plan into chunks if it's too big and can't fit into the GitHub Action
+          var plans = chunkSubstr(plan, maxGitHubBodyCharacters); 
+          for (let i = 0; i < plans.length; i++) {
+            const output = `### ${{ inputs.plan-title }} Part # ${i + 1}
+            #### Terraform Format and Style 🖌\`${{ steps.fmt.outcome }}\`
+            #### Terraform Initialization ⚙️\`${{ steps.init.outcome }}\`
+            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
 
-          const chunks = splitIntoChunks(plan, limit);
+            <details><summary>Show Plan</summary>
 
-          for (let i = 0; i < chunks.length; i++) {
+            \`\`\`\n
+            ${plans[i]}
+            \`\`\`
+
+            </details>
+
+            *Pusher: @${{ github.actor }}, Action: \`${{ github.event_name }}\`, Working Directory: \`${{ inputs.working-directory }}\`, Workflow: \`${{ github.workflow }}\`*`;   
+            
             await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: `### ${process.env.PLAN_TITLE} (Part ${i + 1})
-
-          \`\`\`
-          ${chunks[i]}
-          \`\`\`
-
-          Environment: **${process.env.ENVIRONMENT}**`
-                    });
-                  }
-              env:
-                ENVIRONMENT: ${{ inputs.environment }}
-                PLAN_TITLE: ${{ inputs['plan-title'] }}
+              body: output
+            })
+          }
 
 
     - name: Terraform Apply
-      if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+      if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' && inputs.destroy != 'true' }}
       shell: bash
       working-directory: ${{ env.WORKDIR }}
       env:
