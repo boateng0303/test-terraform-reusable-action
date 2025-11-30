@@ -167,7 +167,7 @@ runs:
           Environment: **${process.env.ENVIRONMENT}**`
                   });
                 }
-            env:
+        env:
               ENVIRONMENT: ${{ inputs.environment }}
               PLAN_TITLE: ${{ inputs.plan_title }}
 
