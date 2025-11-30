@@ -1,0 +1,57 @@
+name: Terraform Infrastructure Pipeline
+
+on:
+  pull_request:
+    branches:
+      - main
+
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Environment to deploy (Dev, staging, prod)."
+        required: true
+        default: Dev
+      destroy:
+        description: "Set to true to destroy the environment."
+        required: false
+        default: false
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Determine environment
+        id: env
+        run: |
+          # Use workflow_dispatch input if available, otherwise default to 'Dev'
+          ENVIRONMENT="${{ github.event.inputs.environment || 'Dev' }}"
+          echo "ENVIRONMENT=$ENVIRONMENT" >> $GITHUB_ENV
+          echo "Selected environment: $ENVIRONMENT"
+
+      - name: Run Terraform Composite
+        uses: ./.github/actions/terraform-steps
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: us-east-1
+
+          environment: ${{ env.ENVIRONMENT }}
+          terraform-version: latest
+          plan-title: "Terraform Plan Output"
+
+          # composite auto-selects path based on environment
+          working-directory: ""
+
+          # must match composite input name exactly
+          GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
+
+          destroy: ${{ github.event.inputs.destroy || 'false' }}
