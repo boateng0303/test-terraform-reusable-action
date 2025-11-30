@@ -182,8 +182,8 @@ runs:
 
     - name: Terraform Apply
       #if: ${{ ((github.ref == 'refs/heads/main' && github.event_name == 'push')|| github.event_name == 'workflow_dispatch')&& inputs.destroy != 'true' }}
-      if: ${{ inputs.destroy != 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
-    
+      #if: ${{ inputs.destroy != 'true' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch') }}
+      if: ${{ github.event.inputs.destroy != 'true' && inputs.destroy != 'true' }}
 
       shell: bash
       working-directory: ${{ env.WORKDIR }}
@@ -195,7 +195,8 @@ runs:
       run: terraform apply -input=false tf.plan
 
     - name: Terraform Destroy
-      if: ${{ inputs.destroy == 'true' }}
+      #if: ${{ inputs.destroy == 'true' }}
+      if: ${{ github.event.inputs.destroy == 'true' || inputs.destroy == 'true' }}
       shell: bash
       working-directory: ${{ env.WORKDIR }}
       env:
