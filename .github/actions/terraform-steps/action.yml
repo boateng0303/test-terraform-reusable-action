@@ -1,0 +1,196 @@
+name: Terraform Steps
+description: Run Terraform plan, apply, destroy, linting, and security scans for AWS environments
+
+inputs:
+  aws-access-key-id:
+    description: AWS Access Key ID
+    required: true
+  aws-secret-access-key:
+    description: AWS Secret Access Key
+    required: true
+  aws-session-token:
+    description: AWS Session Token (optional)
+    required: false
+  aws-region:
+    description: AWS region to deploy to
+    required: true
+    default: us-east-1
+  environment:
+    description: Target environment (dev, staging, prod)
+    required: true
+    default: dev
+  working-directory:
+    description: Override path (optional)
+    required: false
+    default: ""
+  plan-title:
+    description: Title for Terraform plan comment
+    required: true
+  terraform-version:
+    description: Terraform version
+    required: false
+    default: latest
+  GITHUB_TOKEN:
+    description: GitHub token for PR comments
+    required: true
+  destroy:
+    description: Trigger terraform destroy
+    required: false
+    default:  "false"
+
+branding:
+  icon: cloud
+  color: blue
+
+runs:
+  using: composite
+  steps:
+
+    - name: Checkout repo
+      uses: actions/checkout@v3
+
+    - name: Resolve Working Directory
+      id: set-dir
+      shell: bash
+      run: |
+        if [ -z "${{ inputs.working-directory }}" ]; then
+          echo "WORKDIR=environments/${{ inputs.environment }}" >> $GITHUB_ENV
+        else
+          echo "WORKDIR=${{ inputs.working-directory }}" >> $GITHUB_ENV
+        fi
+        echo "Final working directory: $WORKDIR"
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: ${{ inputs.terraform-version }}
+        terraform_wrapper: false
+
+    - name: Terraform Fmt
+      shell: bash
+      working-directory: ${{ env.WORKDIR }}
+      run: terraform fmt -check || true
+
+    - name: Install TFLint
+      shell: bash
+      run: |
+           curl -s https://raw.githubusercontent.com/terraform-linters/tflint/master/install_linux.sh | bash
+
+    - name: Install Checkov
+      shell: bash
+      run: |
+        pip install --user checkov
+        export PATH=$HOME/.local/bin:$PATH
+
+    - name: Install TFSEC
+      shell: bash
+      run: |
+        curl -s https://raw.githubusercontent.com/aquasecurity/tfsec/master/scripts/install_linux.sh | bash
+
+
+    - name: TFLint
+      shell: bash
+      working-directory: ${{ env.WORKDIR }}
+      run: tflint || true
+
+    - name: Checkov
+      shell: bash
+      working-directory: ${{ env.WORKDIR }}
+      run: checkov -d . || true
+
+    - name: TFSEC
+      shell: bash
+      working-directory: ${{ env.WORKDIR }}
+      run: tfsec . || true
+
+    - name: Terraform Init
+      shell: bash
+      working-directory: ${{ env.WORKDIR }}
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
+        AWS_SESSION_TOKEN: ${{ inputs.aws-session-token }}
+        AWS_REGION: ${{ inputs.aws-region }}
+      run: terraform init
+
+    - name: Terraform Validate
+      shell: bash
+      working-directory: ${{ env.WORKDIR }}
+      run: terraform validate -no-color
+
+    - name: Terraform Plan
+      shell: bash
+      working-directory: ${{ env.WORKDIR }}
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
+        AWS_SESSION_TOKEN: ${{ inputs.aws-session-token }}
+        AWS_REGION: ${{ inputs.aws-region }}
+      run: terraform plan -input=false -no-color -out tf.plan
+
+    - name: Terraform Show
+      shell: bash
+      working-directory: ${{ env.WORKDIR }}
+      run: terraform show -no-color tf.plan > /tmp/plan.txt
+
+    - name: Comment PR with Terraform Plan
+      if: ${{ github.event_name == 'pull_request' }}
+      uses: actions/github-script@v6
+      with:
+        github-token: ${{ inputs.PERSONAL_TOKEN }}   # required
+        script: |
+          const fs = require("fs");
+          const plan = fs.readFileSync("/tmp/plan.txt", "utf8");
+          const limit = 60000;
+
+          function splitIntoChunks(text, size) {
+            const out = [];
+            for (let i = 0; i < text.length; i += size) {
+              out.push(text.substring(i, i + size));
+            }
+            return out;
+          }
+
+          const chunks = splitIntoChunks(plan, limit);
+
+          for (let i = 0; i < chunks.length; i++) {
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `### ${process.env.PLAN_TITLE} (Part ${i + 1})
+
+          \`\`\`
+          ${chunks[i]}
+          \`\`\`
+
+          Environment: **${process.env.ENVIRONMENT}**`
+                    });
+                  }
+              env:
+                ENVIRONMENT: ${{ inputs.environment }}
+                PLAN_TITLE: ${{ inputs['plan-title'] }}
+
+
+    - name: Terraform Apply
+      if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+      shell: bash
+      working-directory: ${{ env.WORKDIR }}
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
+        AWS_SESSION_TOKEN: ${{ inputs.aws-session-token }}
+        AWS_REGION: ${{ inputs.aws-region }}
+      run: terraform apply -input=false tf.plan
+
+    - name: Terraform Destroy
+      if: ${{ inputs.destroy == 'true' }}
+      shell: bash
+      working-directory: ${{ env.WORKDIR }}
+      env:
+        AWS_ACCESS_KEY_ID: ${{ inputs.aws-access-key-id }}
+        AWS_SECRET_ACCESS_KEY: ${{ inputs.aws-secret-access-key }}
+        AWS_SESSION_TOKEN: ${{ inputs.aws-session-token }}
+        AWS_REGION: ${{ inputs.aws-region }}
+      run: terraform destroy -auto-approve
+#
