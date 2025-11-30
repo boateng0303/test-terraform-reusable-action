@@ -10,15 +10,23 @@ on:
       - main
 
   workflow_dispatch:
-    inputs:
-      environment:
-        description: "Environment to deploy (Dev, staging, prod)."
-        required: true
-        default: Dev
-      destroy:
-        description: "Set to true to destroy the environment."
-        required: false
-        default: false
+   inputs:
+    environment:
+      type: choice
+      description: "Select environment to deploy"
+      required: true
+      default: Dev
+      options:
+        - Dev
+        - staging
+        - prod
+
+    destroy:
+      type: boolean
+      description: "Destroy environment"
+      required: false
+      default: false
+
 
 jobs:
   terraform:
@@ -55,4 +63,4 @@ jobs:
           # must match composite input name exactly
           GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
 
-          destroy: ${{ github.event.inputs.destroy || 'false' }}
+          destroy: ${{ github.event.inputs.destroy || 'true' }}
